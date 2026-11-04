@@ -19,7 +19,7 @@
 
 Skills CLI 不会因本 Skill 提到了另一个 Skill，就自动解析并安装它。下面的联合安装脚本会明确执行两次安装；单独安装本 Skill 时，需要自行补装或复用已有的官方 Skill。
 
-安装 Skill 也不会安装 Node.js、Remotion 工程、渲染浏览器或 Python。进入制作阶段后，助手会按 [环境准备流程](skills/narrated-explainer-video/references/environment.md) 检查并补齐实际需要的环境。
+安装 Skill 也不会安装 Node.js、Remotion 工程、渲染浏览器或 Python。进入制作阶段后，助手会按 [环境准备流程](references/environment.md) 检查并补齐实际需要的环境。
 
 ## 安装
 
@@ -75,7 +75,7 @@ npx skills add remotion-dev/skills --skill remotion-best-practices --agent codex
 
 助手会先了解当前材料和交付要求，再组织逐句分镜。动画重点表现因果、过程、对比、累积和反馈；画面文字负责强调，字幕负责帮助观众跟上口播。
 
-已有素材会参与视觉设计，但不限制所有镜头采用同一种背景或布局。需要时检查透明边缘、裁切、角色状态与字体加载；字幕和平台界面留出合理空间，具体位置与尺寸按画幅和内容确定。相关方法见 [素材准备](skills/narrated-explainer-video/references/assets.md)、[环境与字体](skills/narrated-explainer-video/references/environment.md) 和 [分镜与语义动画](skills/narrated-explainer-video/references/storyboard.md)。
+已有素材会参与视觉设计，但不限制所有镜头采用同一种背景或布局。需要时检查透明边缘、裁切、角色状态与字体加载；字幕和平台界面留出合理空间，具体位置与尺寸按画幅和内容确定。相关方法见 [素材准备](references/assets.md)、[环境与字体](references/environment.md) 和 [分镜与语义动画](references/storyboard.md)。
 
 进入工程制作时，已有 Remotion 项目优先按原包管理器和锁文件恢复依赖；没有工程时再创建。先验证 Studio 预览和测试帧，再制作整片。仅讨论稿子或方案时无需安装完整环境。
 
@@ -86,7 +86,7 @@ npx skills add remotion-dev/skills --skill remotion-best-practices --agent codex
 仓库附带 Python 工具，使用标准库解析 SRT，保留字幕原文与绝对时间，并输出帧时间轴和警告。从仓库根目录可以执行：
 
 ```bash
-python3 skills/narrated-explainer-video/scripts/inspect_media.py \
+python3 scripts/inspect_media.py \
   --srt "/path/to/captions.srt" \
   --audio "/path/to/narration.mp3" \
   --fps 30 \
@@ -97,30 +97,28 @@ python3 skills/narrated-explainer-video/scripts/inspect_media.py \
 
 `--audio` 与 `--output` 可省略；不指定输出文件时，JSON 写入标准输出。分数帧率可写为 `--fps 30000/1001`。传入 `--audio` 时，系统 `PATH` 中需要有 `ffprobe`；Remotion 提供的媒体工具不会自动被这个 Python 脚本调用。
 
-工具检查时间结构，不进行语音识别，也不能证明字幕文字与发音一致。最终同步和观看体验仍需要实际预览。详见 [实现与同步](skills/narrated-explainer-video/references/production.md)。
+工具检查时间结构，不进行语音识别，也不能证明字幕文字与发音一致。最终同步和观看体验仍需要实际预览。详见 [实现与同步](references/production.md)。
 
 ## 仓库结构
 
 ```text
-README.md                                 面向使用者的安装与使用说明
+SKILL.md                       面向 AI 助手的工作流程入口
+README.md                      面向使用者的安装与使用说明
+LICENSE                        MIT 许可证
+agents/
+  openai.yaml                  Skill 界面元数据
+references/
+  environment.md               环境检查与首次搭建
+  storyboard.md                分镜与语义动画
+  assets.md                    素材准备与复用
+  production.md                工程实现与时间同步
+  review-delivery.md            预览、检查与交付
 scripts/
-  install.sh                              联合安装本 Skill 与官方 Remotion Skill
-skills/narrated-explainer-video/
-  SKILL.md                                面向 AI 助手的工作流程入口
-  references/
-    environment.md                        环境检查与首次搭建
-    storyboard.md                         分镜与语义动画
-    assets.md                             素材准备与复用
-    production.md                         工程实现与时间同步
-    review-delivery.md                    预览、检查与交付
-  scripts/
-    inspect_media.py                      SRT 与音频时间轴检查工具
-  agents/
-    openai.yaml                           Skill 界面元数据
-LICENSE                                   MIT 许可证
+  install.sh                   联合安装本 Skill 与官方 Remotion Skill
+  inspect_media.py             SRT 与音频时间轴检查工具
 ```
 
-根目录的 `scripts/` 服务于仓库安装；Skill 内的 `scripts/` 随 Skill 分发，供实际制作任务调用。安装过程中从官方来源获取 Remotion Skill，本仓库不内置其副本。
+本仓库只发布一个 Skill，`SKILL.md` 和配套文件直接放在根目录。`scripts/install.sh` 是联合安装入口，`scripts/inspect_media.py` 是制作时使用的时间轴工具。安装过程中从官方来源获取 Remotion Skill，本仓库不内置其副本。
 
 ## 许可证
 
