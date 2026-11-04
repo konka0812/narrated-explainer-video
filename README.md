@@ -1,97 +1,127 @@
 # 口播科普动画 Skill
 
-把一份口播稿、旁白和字幕，变成有分镜、有解释性动作、可以继续修改的科普动画视频。
+把口播稿、旁白和字幕转化为有分镜、有解释性动作、可以继续修改的科普动画视频。
 
-这个 Skill 将创作经验整理成 AI 助手可执行的工作流程：从理解内容、确定风格，到逐句设计画面、制作预览、根据反馈调整，最后按需导出视频。适用于知识讲解、原理演示、流程说明、观点评论等主题，不限定视频画幅、视觉风格或发布平台。
+这个 Skill 为 AI 助手提供从内容理解、视觉设计到动画制作、预览修改和交付的工作流程，适用于知识讲解、原理演示、流程说明和观点评论。不限定主题、画幅、视觉风格或发布平台。
 
 ## 它能做什么
 
-- 从选题、口播稿、已有音频字幕或现有视频工程开始，按当前进度继续。
-- 以用户指定的最终音频和 SRT 字幕为时间依据，检查字幕时间、重叠和超出音频等问题。
-- 将口播拆成分镜，用对象、动作和状态变化解释内容，让每句话都有视觉承接，而不是机械地每句换镜头。
-- 设计适合内容的配色、字体、镜头和画面节奏；根据反馈修改小字、留白过多、素材重复等问题。
-- 在工程实现阶段检查环境，使用 Remotion 或合适的现有工具制作、预览和迭代。
-- 按需导出成片，制作封面、发布标题与文案；制作发布素材不代表自动发布。
+- 从选题、口播稿、最终音频字幕或已有工程开始，按当前进度继续。
+- 以用户指定的最终版本建立时间轴，检查字幕重叠、空白和超出音频等问题。
+- 用对象、动作和状态变化解释口播，让每句话都有视觉承接，无需机械地逐句切镜头。
+- 结合已有素材确定视觉方向，处理文字大小、素材重复、字体加载和字幕安全区等问题。
+- 使用 Remotion 制作、预览和迭代；已有合适的其他工具链也可沿用。
+- 按需导出视频，并制作封面、发布标题与文案。发布素材由用户决定如何发布。
+
+## 与 Remotion Skill 的关系
+
+本 Skill 负责科普视频的内容表达、分镜和制作流程；官方 [`remotion-best-practices`](https://github.com/remotion-dev/skills) 负责 Remotion 的具体实现与渲染指导。使用 Remotion 制作时，两者应安装到同一个 AI 助手和安装范围中。
+
+Skills CLI 不会因本 Skill 提到了另一个 Skill，就自动解析并安装它。下面的联合安装脚本会明确执行两次安装；单独安装本 Skill 时，需要自行补装或复用已有的官方 Skill。
+
+安装 Skill 也不会安装 Node.js、Remotion 工程、渲染浏览器或 Python。进入制作阶段后，助手会按 [环境准备流程](skills/narrated-explainer-video/references/environment.md) 检查并补齐实际需要的环境。
 
 ## 安装
 
-本 Skill 与 [Remotion 官方 Skills](https://www.remotion.dev/docs/ai/skills) 配合使用：前者负责科普视频的内容、分镜和制作流程，后者提供 Remotion 实现与渲染指导。使用 Remotion 制作时，请将两者安装到同一个 AI 助手使用的环境。
+安装器需要 Node.js、`npx` 和网络连接。先检查仓库中的 [`scripts/install.sh`](scripts/install.sh)，再执行。
 
-可以先克隆仓库，审阅 `scripts/install.sh`，再运行安装脚本：
+### Codex 用户级安装
+
+将两个 Skill 安装到 Codex 的用户级环境，方便多个视频项目复用：
 
 ```bash
-git clone https://github.com/konka0812/narrated-explainer-video.git narrated-explainer-video
+git clone https://github.com/konka0812/narrated-explainer-video.git
 cd narrated-explainer-video
-bash scripts/install.sh
+bash scripts/install.sh --agent codex --global
 ```
 
-脚本依次调用 Skills CLI 安装本 Skill 与官方 `remotion-best-practices`。根据提示为两次安装选择相同的 AI 助手与安装范围；也可以传入相同参数避免两次交互，例如 `bash scripts/install.sh --agent codex --global --yes`。脚本会访问网络，Node.js 与 `npx` 需事先可用。
+脚本把相同的参数传给两次安装。可追加 `--yes` 跳过安装器确认；使用其他支持 Skills 的助手时，将 `codex` 替换为对应助手名称。已有同名 Skill 或本地修改时，先查看安装器提示，避免覆盖需要保留的内容。
 
-也可以手动在终端依次安装：
+### 项目级安装
+
+项目级安装的位置由**执行命令时的当前工作目录**决定。先进入目标视频工程，再使用安装脚本的绝对路径，不传 `--global`：
 
 ```bash
-npx skills add https://github.com/konka0812/narrated-explainer-video.git
-npx skills add remotion-dev/skills --skill remotion-best-practices
+cd "/path/to/video-project"
+bash "/path/to/narrated-explainer-video/scripts/install.sh" --agent codex
 ```
 
-按照安装器提示选择你的 AI 助手及安装范围。以上是两次独立安装：单独安装本 Skill **不会自动安装** Remotion 官方 Skills，也不会自动安装 Node.js、Remotion 工程或渲染所需环境。安装前可查阅 [Skills CLI 文档](https://skills.sh/docs/cli) 和 [Remotion 官方文档](https://www.remotion.dev/docs/)。
+将示例路径替换为实际位置。如果在本仓库目录直接执行无 `--global` 的命令，Skill 会安装到本仓库，而非另一个视频工程。
 
-如果当前环境已有 Remotion 官方 Skills，可直接复用；若不使用 Remotion，已有合适的制作工具也可以用于相应任务。
+### 手动安装与 Windows PowerShell
+
+`install.sh` 需要 Bash；Windows 可使用 Git Bash / WSL，也可以在 PowerShell 中分别执行以下两条命令：
+
+```powershell
+npx skills add konka0812/narrated-explainer-video --skill narrated-explainer-video --agent codex --global
+npx skills add remotion-dev/skills --skill remotion-best-practices --agent codex --global
+```
+
+项目级安装时，在目标视频工程目录中执行，并同时移除两条命令的 `--global`。两次安装选择相同的助手和范围。安装器的更多选项见 [Skills CLI 文档](https://skills.sh/docs/cli)，官方依赖的使用方式见 [Remotion Agent Skills 文档](https://www.remotion.dev/docs/ai/skills)。
 
 ## 开始使用
 
 在支持 Skills 的 AI 助手中，可以这样描述需求：
 
-> 使用 `$narrated-explainer-video` 和 Remotion Skills，根据我的口播稿、音频和 SRT 字幕制作一条科普动画。先分析字幕与时间轴，给我几个关键画面的设计方案，等我确认后再制作。
+> 使用 `$narrated-explainer-video` 和 Remotion Skill，根据我的口播稿、音频和 SRT 字幕制作科普动画。先分析内容和时间轴，给我几个关键画面的设计方案，等我确认后再制作。
 
-也可以直接针对已有工程提出修改：
+已有工程可以直接提出修改：
 
-> 使用 `$narrated-explainer-video`，根据新的旁白和字幕更新视频。开头标题太小，部分画面重复，帮我调整排版、动画和时间同步，然后提供预览。
+> 使用 `$narrated-explainer-video`，根据新的旁白和字幕更新视频。开头标题太小，部分素材重复，帮我调整排版、动画和同步，然后提供预览。
 
-可提供的材料包括主题与受众、口播稿、最终旁白、SRT 字幕、目标画幅、风格参考和已有工程。不必一次准备齐全；如果没有最终音频，分镜时长仅能估算。
+可提供主题与受众、口播稿、最终音频、SRT 字幕、目标平台与画幅、风格参考和已有工程。不必一次准备齐全；没有最终音频时，分镜时长只能估算。已确定的风格与交付要求可以直接沿用，无需每次重新选择。
 
-## Remotion 环境
+## 制作方式
 
-**Skill 是给 AI 助手的指导文件，Remotion 工程才是实际运行和渲染视频的项目。**
+助手会先了解当前材料和交付要求，再组织逐句分镜。动画重点表现因果、过程、对比、累积和反馈；画面文字负责强调，字幕负责帮助观众跟上口播。
 
-进入制作阶段时，助手应先检查本机环境。已有工程优先按原有包管理器和锁文件恢复依赖；没有工程时再准备 Node.js、包管理器和兼容的系统环境，创建新工程，准备渲染浏览器，并检查 Studio 预览和测试帧。仅讨论选题或方案时，不需要先安装完整环境。
+已有素材会参与视觉设计，但不限制所有镜头采用同一种背景或布局。需要时检查透明边缘、裁切、角色状态与字体加载；字幕和平台界面留出合理空间，具体位置与尺寸按画幅和内容确定。相关方法见 [素材准备](skills/narrated-explainer-video/references/assets.md)、[环境与字体](skills/narrated-explainer-video/references/environment.md) 和 [分镜与语义动画](skills/narrated-explainer-video/references/storyboard.md)。
 
-详见 [环境检查与首次搭建](skills/narrated-explainer-video/references/environment.md) 和 [Remotion 官方创建项目文档](https://www.remotion.dev/docs/)。
+进入工程制作时，已有 Remotion 项目优先按原包管理器和锁文件恢复依赖；没有工程时再创建。先验证 Studio 预览和测试帧，再制作整片。仅讨论稿子或方案时无需安装完整环境。
+
+交付前区分静帧检查、连续播放和文件检查：它们分别验证构图与可读性、节奏与同步、编码与完整性。检查范围会如实记录。封面和发布文案按需制作，不自动扩展交付范围。
 
 ## 字幕时间轴检查
 
-项目附有 `scripts/inspect_media.py`，使用 Python 3 标准库解析 SRT，保留字幕原文和绝对时间，并生成帧时间轴及警告：
+仓库附带 Python 工具，使用标准库解析 SRT，保留字幕原文与绝对时间，并输出帧时间轴和警告。从仓库根目录可以执行：
 
 ```bash
-python3 /path/to/narrated-explainer-video/scripts/inspect_media.py \
-  --srt /path/to/captions.srt \
-  --audio /path/to/narration.mp3 \
+python3 skills/narrated-explainer-video/scripts/inspect_media.py \
+  --srt "/path/to/captions.srt" \
+  --audio "/path/to/narration.mp3" \
   --fps 30 \
-  --output /path/to/timeline.json
+  --output "/path/to/timeline.json"
 ```
 
-把路径替换为实际安装位置和输入文件。`--audio` 与 `--output` 可省略；不指定输出文件时，JSON 写入标准输出。分数帧率可写为 `--fps 30000/1001`。脚本传入 `--audio` 时需要系统 `PATH` 中有 `ffprobe`；Remotion 自带的媒体工具不会自动被这个脚本调用。
+在 Windows 中可使用本机可用的 `python` 或 `py` 命令，并按 PowerShell 语法换行，或将命令写成一行。示例路径替换为实际位置，输出文件的父目录需要存在。
 
-脚本用于检查时间结构，并不进行语音识别，也不能判断字幕文字是否与口播一致；音画同步和观看体验仍需要实际预览。
+`--audio` 与 `--output` 可省略；不指定输出文件时，JSON 写入标准输出。分数帧率可写为 `--fps 30000/1001`。传入 `--audio` 时，系统 `PATH` 中需要有 `ffprobe`；Remotion 提供的媒体工具不会自动被这个 Python 脚本调用。
 
-## 目录
+工具检查时间结构，不进行语音识别，也不能证明字幕文字与发音一致。最终同步和观看体验仍需要实际预览。详见 [实现与同步](skills/narrated-explainer-video/references/production.md)。
+
+## 仓库结构
 
 ```text
-scripts/install.sh                              两个 Skill 的安装入口
+README.md                                 面向使用者的安装与使用说明
+scripts/
+  install.sh                              联合安装本 Skill 与官方 Remotion Skill
 skills/narrated-explainer-video/
-  SKILL.md                                      Skill 入口与整体工作流程
-  references/environment.md                     环境检查与首次搭建
-  references/storyboard.md                      分镜与语义动画
-  references/production.md                      工程实现与时间同步
-  references/review-delivery.md                 预览、检查与交付
-  scripts/inspect_media.py                      SRT 与音频时间轴检查工具
-  agents/openai.yaml                            Skill 界面元数据
+  SKILL.md                                面向 AI 助手的工作流程入口
+  references/
+    environment.md                        环境检查与首次搭建
+    storyboard.md                         分镜与语义动画
+    assets.md                             素材准备与复用
+    production.md                         工程实现与时间同步
+    review-delivery.md                    预览、检查与交付
+  scripts/
+    inspect_media.py                      SRT 与音频时间轴检查工具
+  agents/
+    openai.yaml                           Skill 界面元数据
+LICENSE                                   MIT 许可证
 ```
 
-## 创作原则
-
-动画的作用是帮助理解：把因果、过程、对比、累积和反馈变成观众看得见的变化。画面文字要简洁、清楚，不能为了填满屏幕而堆砌装饰；新闻截图和数据要保留真实来源与上下文。静帧检查、连续播放和导出文件检查各有作用，不能相互替代。
+根目录的 `scripts/` 服务于仓库安装；Skill 内的 `scripts/` 随 Skill 分发，供实际制作任务调用。安装过程中从官方来源获取 Remotion Skill，本仓库不内置其副本。
 
 ## 许可证
 
-本仓库代码和文档采用 [MIT 许可证](LICENSE)。Remotion 官方 Skill 独立维护，其许可与使用条件以其官方仓库为准。
+本仓库代码和文档采用 [MIT 许可证](LICENSE)。Remotion 官方 Skill 独立维护，其许可与使用条件以官方仓库为准。
