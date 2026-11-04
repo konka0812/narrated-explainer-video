@@ -1,4 +1,4 @@
 interface:
   display_name: "口播科普动画"
-  short_description: "把口播稿、音频和字幕转成逐句对应的解释性分镜、动画与可发布视频"
-  default_prompt: "使用 $narrated-explainer-video，根据我的口播稿或音频字幕，设计并制作清晰易懂的科普动画，从当前已有材料和制作阶段继续。"
+  short_description: "以创作者确认的口播和现有素材为依据，按需设计分镜、制作或改进科普动画"
+  default_prompt: "使用 $narrated-explainer-video，结合我敲定的口播和手头的素材，从这次要做的部分开始。"

@@ -15,6 +15,7 @@ from pathlib import Path
 
 STAMP = r"(\d{2,}):([0-5]\d):([0-5]\d)[,.](\d{3})"
 TIMING = re.compile(r"^\s*" + STAMP + r"\s*-->\s*" + STAMP + r"\s*$")
+CUE_ID = re.compile(r"\s*\d+\s*")
 LONG_GAP_MS = 3000
 
 
@@ -44,7 +45,7 @@ def read_srt(path, fps, warnings):
     cues, previous_start, covered_end, seen_ids = [], -1, 0, set()
     for ordinal, block in enumerate(blocks, 1):
         lines = block.split("\n")
-        if len(lines) < 2 or not re.fullmatch(r"\s*\d+\s*", lines[0]):
+        if len(lines) < 2 or not CUE_ID.fullmatch(lines[0]):
             raise ValueError(f"SRT block {ordinal}: expected a numeric cue identifier and timing line")
         match = TIMING.fullmatch(lines[1])
         if not match:
@@ -58,11 +59,15 @@ def read_srt(path, fps, warnings):
         if cue_id in seen_ids:
             warning(warnings, "duplicate_id", f"Repeated source cue identifier {cue_id}", ordinal)
         seen_ids.add(cue_id)
+        for identifier, timing in zip(lines[2:], lines[3:]):
+            if CUE_ID.fullmatch(identifier) and TIMING.fullmatch(timing):
+                raise ValueError(f"SRT block {ordinal}: missing blank line before cue {identifier.strip()}")
         text = "\n".join(lines[2:])
         if not text.strip():
             warning(warnings, "empty_text", "Subtitle has no visible text", ordinal)
         if start < covered_end:
-            warning(warnings, "overlap", f"Subtitle overlaps earlier coverage by {(covered_end - start) / 1000:g} seconds", ordinal)
+            overlap_ms = min(end, covered_end) - start
+            warning(warnings, "overlap", f"Subtitle overlaps earlier coverage by {overlap_ms / 1000:g} s", ordinal)
         elif start - covered_end > LONG_GAP_MS:
             warning(warnings, "long_gap", f"Gap before subtitle is {(start - covered_end) / 1000:g} seconds; confirm it is intentional", ordinal)
         start_frame = nearest_frame(start, fps)
@@ -88,24 +93,39 @@ def audio_duration(path):
     if not ffprobe:
         raise ValueError("ffprobe is required for --audio; install FFmpeg or omit --audio")
     result = subprocess.run(
-        [ffprobe, "-v", "error", "-select_streams", "a:0", "-show_entries",
-         "stream=duration:format=duration", "-of", "json", str(path)],
+        [ffprobe, "-v", "error", "-show_entries",
+         "stream=codec_type,duration,start_time:stream_tags=duration:stream_disposition=attached_pic:format=duration",
+         "-of", "json", str(path)],
         capture_output=True, text=True, timeout=30, check=False,
     )
     if result.returncode:
         raise ValueError(f"ffprobe failed: {result.stderr.strip() or 'no diagnostic output'}")
     data = json.loads(result.stdout)
-    streams = data.get("streams", [])
-    if not streams:
+    streams = [s for s in data.get("streams", []) if s.get("codec_type") != "attachment"
+               and not s.get("disposition", {}).get("attached_pic")]
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    if audio is None:
         raise ValueError("Input has no audio stream")
-    for candidate in (streams[0].get("duration"), data.get("format", {}).get("duration")):
+    candidates = [audio.get("duration")]
+    # Matroska's DURATION tag can be an end timestamp for tracks that start late.
+    start_time = audio.get("start_time")
+    zero_start = re.fullmatch(r"0+(?:\.0+)?", start_time or "")
+    if zero_start:
+        tags = {key.upper(): value for key, value in audio.get("tags", {}).items()}
+        clock = re.fullmatch(r"(\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)", tags.get("DURATION", ""))
+        if clock:
+            hours, minutes, seconds = clock.groups()
+            candidates.append(int(hours) * 3600 + int(minutes) * 60 + Fraction(seconds))
+    if len(streams) == 1 and (zero_start or start_time is None):
+        candidates.append(data.get("format", {}).get("duration"))
+    for candidate in candidates:
         try:
             duration = Fraction(str(candidate))
             if duration > 0:
                 return duration
         except (ValueError, ZeroDivisionError):
             pass
-    raise ValueError("ffprobe did not report a positive audio duration")
+    raise ValueError("ffprobe could not determine the first audio stream's duration; supply an extracted narration track")
 
 
 def write_json(data, output):
