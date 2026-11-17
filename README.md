@@ -80,7 +80,7 @@ npx skills add remotion-dev/skills --skill remotion-best-practices --agent codex
 
 需要时检查透明边缘、裁切、角色状态与字体加载；字幕和平台界面留出合理空间，具体位置与尺寸按画幅和内容确定。相关方法见 [素材设计与复用](references/assets.md)、[环境与字体](references/environment.md) 和 [分镜与语义动画](references/storyboard.md)。
 
-进入工程制作时，已有 Remotion 项目优先按原包管理器和锁文件恢复依赖；没有工程时再创建。先验证 Studio 预览和测试帧，再制作整片。仅讨论稿子或方案时无需安装完整环境。
+进入工程制作时，已有 Remotion 项目优先按原包管理器和锁文件恢复依赖；没有工程时再创建。先按环境能力验证最小制作链路：交互环境检查 Studio 预览，无头环境可检查组合、测试帧和必要的短片导出，实际播放与听音的检查范围分别记录。仅讨论稿子或方案时无需安装完整环境。
 
 交付前区分静帧检查、连续播放和文件检查：它们分别验证构图与可读性、节奏与同步、编码与完整性。检查范围会如实记录。封面和发布文案按需制作，不自动扩展交付范围。
 
@@ -102,6 +102,10 @@ python3 scripts/inspect_media.py \
 
 工具检查时间结构，字幕间漏掉空行时会指出位置。传入多轨文件时读取首条音轨，旁白在其他轨道时可单独导出。文字是否与发音一致，还需要对照录音。详见[实现与同步](references/production.md)。
 
+非空字幕显示不足 300 毫秒时默认给出风险提示，使用 `--min-cue-duration-ms 0` 可关闭，或设置其他非负整数阈值。阅读量提示需要显式提供 `--max-cps`，例如 `--max-cps 20`；它粗估原文每秒非空白字符数，不是适用于所有语言的标准。两类提示都只进入 `warnings`，不会自动修改字幕。
+
+输出保留原有 `sources` 路径字段，并增加 `sourceFingerprints` 中的 SHA-256 指纹，用于核对输入文件内容是否变化；没有传音频时，音频指纹为 `null`。输入变动后仍需重新生成并检查时间轴，指纹不会自动替工程更新数据。
+
 ## 仓库结构
 
 ```text
@@ -119,11 +123,26 @@ references/
 scripts/
   install.sh                   联合安装本 Skill 与官方 Remotion Skill
   inspect_media.py             SRT 与音频时间轴检查工具
+  run_tests.py                 测试入口，未发现测试时返回失败
 tests/
+  __init__.py                  支持从仓库根目录发现测试
   test_inspect_media.py        时间轴工具回归测试
+  behavior-scenarios.md        不依赖私人工程的使用场景与观察点
 ```
 
 本仓库只发布一个 Skill，`SKILL.md` 和配套文件直接放在根目录。`scripts/install.sh` 是联合安装入口，`scripts/inspect_media.py` 是制作时使用的时间轴工具。安装过程中从官方来源获取 Remotion Skill，本仓库不内置其副本。
+
+## 维护与验证
+
+在仓库根目录运行：
+
+```bash
+python3 scripts/run_tests.py
+```
+
+入口使用标准库发现并运行测试，未发现任何测试时会返回失败，避免把空跑当成通过。也可明确执行 `python3 -m unittest discover -s tests -v`。音频集成测试需要 `ffmpeg` 和 `ffprobe`；缺少时会跳过相关测试，应按实际结果记录覆盖范围。
+
+脚本测试验证时间轴工具，不代表写稿、分镜或画面质量已经通过。修改内容指导时，可选用 [使用场景回看](tests/behavior-scenarios.md) 中相关请求做独立试用，保留实际回答，检查是否尊重任务范围、材料和定稿，不按固定措辞打分。仅修改文档时不必安装整套视频环境。
 
 ## 许可证
 

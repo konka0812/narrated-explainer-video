@@ -2,6 +2,7 @@
 """Inspect SRT/audio and emit an absolute, non-accumulating frame timeline."""
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -17,6 +18,7 @@ STAMP = r"(\d{2,}):([0-5]\d):([0-5]\d)[,.](\d{3})"
 TIMING = re.compile(r"^\s*" + STAMP + r"\s*-->\s*" + STAMP + r"\s*$")
 CUE_ID = re.compile(r"\s*\d+\s*")
 LONG_GAP_MS = 3000
+MIN_CUE_DURATION_MS = 300
 
 
 def milliseconds(parts):
@@ -37,12 +39,15 @@ def warning(warnings, code, message, cue=None):
     warnings.append(item)
 
 
-def read_srt(path, fps, warnings):
-    raw = path.read_text(encoding="utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
+def read_srt(path, fps, warnings, *, min_cue_duration_ms=MIN_CUE_DURATION_MS,
+             max_cps=None, source_bytes=None):
+    content = path.read_bytes() if source_bytes is None else source_bytes
+    raw = content.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
     if not raw.strip():
         raise ValueError("SRT is empty")
     blocks = re.split(r"\n[ \t]*\n+", raw.strip("\n"))
-    cues, previous_start, covered_end, seen_ids = [], -1, 0, set()
+    cues, previous_start, covered_end, covered_end_frame, seen_ids = [], -1, 0, 0, set()
+    cps_threshold = Fraction(str(max_cps)) if max_cps is not None else None
     for ordinal, block in enumerate(blocks, 1):
         lines = block.split("\n")
         if len(lines) < 2 or not CUE_ID.fullmatch(lines[0]):
@@ -63,8 +68,20 @@ def read_srt(path, fps, warnings):
             if CUE_ID.fullmatch(identifier) and TIMING.fullmatch(timing):
                 raise ValueError(f"SRT block {ordinal}: missing blank line before cue {identifier.strip()}")
         text = "\n".join(lines[2:])
-        if not text.strip():
+        non_whitespace_characters = sum(not character.isspace() for character in text)
+        if not non_whitespace_characters:
             warning(warnings, "empty_text", "Subtitle has no visible text", ordinal)
+        else:
+            duration_ms = end - start
+            if duration_ms < min_cue_duration_ms:
+                warning(warnings, "short_duration",
+                        f"Subtitle duration is {duration_ms} ms (below {min_cue_duration_ms} ms); inspect readability", ordinal)
+            if cps_threshold is not None:
+                cps = Fraction(non_whitespace_characters * 1000, duration_ms)
+                if cps > cps_threshold:
+                    warning(warnings, "high_cps",
+                            f"Subtitle has {non_whitespace_characters} non-whitespace characters in {duration_ms} ms "
+                            f"({float(cps):g} characters/s, above {float(cps_threshold):g}); inspect readability", ordinal)
         if start < covered_end:
             overlap_ms = min(end, covered_end) - start
             warning(warnings, "overlap", f"Subtitle overlaps earlier coverage by {overlap_ms / 1000:g} s", ordinal)
@@ -72,7 +89,7 @@ def read_srt(path, fps, warnings):
             warning(warnings, "long_gap", f"Gap before subtitle is {(start - covered_end) / 1000:g} seconds; confirm it is intentional", ordinal)
         start_frame = nearest_frame(start, fps)
         end_frame = max(start_frame + 1, nearest_frame(end, fps))
-        if cues and start_frame < max(c["endFrame"] for c in cues):
+        if start_frame < covered_end_frame:
             if start >= covered_end:
                 warning(warnings, "frame_overlap", "Frame rounding creates an overlap; inspect this boundary", ordinal)
         cues.append({
@@ -83,6 +100,7 @@ def read_srt(path, fps, warnings):
             "durationFrames": end_frame - start_frame,
         })
         previous_start, covered_end = start, max(covered_end, end)
+        covered_end_frame = max(covered_end_frame, end_frame)
     return cues
 
 
@@ -128,6 +146,39 @@ def audio_duration(path):
     raise ValueError("ffprobe could not determine the first audio stream's duration; supply an extracted narration track")
 
 
+def inspect_audio(path):
+    if not path.is_file():
+        raise ValueError(f"Audio file does not exist: {path}")
+
+    def identity():
+        stat = path.stat()
+        return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+
+    original = identity()
+
+    def check_unchanged():
+        try:
+            unchanged = identity() == original
+        except FileNotFoundError:
+            unchanged = False
+        if not unchanged:
+            raise ValueError("Audio input changed during inspection; retry with a stable file")
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    check_unchanged()
+    # ffprobe opens the source independently. These checks catch ordinary edits
+    # or replacements during hashing/probing without copying large media files;
+    # inputs must remain stable during inspection, not be adversarially modified.
+    try:
+        duration = audio_duration(path)
+    finally:
+        check_unchanged()
+    return duration, {"sha256": digest.hexdigest()}
+
+
 def write_json(data, output):
     payload = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
     if output is None:
@@ -151,21 +202,32 @@ def main():
     parser.add_argument("--srt", required=True, type=Path)
     parser.add_argument("--audio", type=Path)
     parser.add_argument("--fps", default="30", help="Positive frame rate, e.g. 30 or 30000/1001")
+    parser.add_argument("--min-cue-duration-ms", default=MIN_CUE_DURATION_MS, type=int,
+                        help="Warn below this duration in original milliseconds (default: 300); 0 disables. Non-negative integer.")
+    parser.add_argument("--max-cps", type=float,
+                        help="Opt-in reading-speed warning above this positive, finite number of non-whitespace characters/second.")
     parser.add_argument("--output", type=Path, help="JSON path; defaults to stdout. Parent directory must exist.")
     args = parser.parse_args()
     try:
         fps = Fraction(args.fps)
         if fps <= 0:
             raise ValueError("--fps must be positive")
+        if args.min_cue_duration_ms < 0:
+            raise ValueError("--min-cue-duration-ms must be a non-negative integer (0 disables)")
+        if args.max_cps is not None and (not math.isfinite(args.max_cps) or args.max_cps <= 0):
+            raise ValueError("--max-cps must be a finite positive number; omit it to disable")
         srt_path = args.srt.resolve()
         audio_path = args.audio.resolve() if args.audio else None
         output_path = args.output.resolve() if args.output else None
         if output_path in (srt_path, audio_path) and output_path is not None:
             raise ValueError("--output must not overwrite an input file")
         warnings = []
-        cues = read_srt(srt_path, fps, warnings)
+        # Hash the exact bytes used for decoding, including BOM/newline choices.
+        srt_bytes = srt_path.read_bytes()
+        cues = read_srt(srt_path, fps, warnings, min_cue_duration_ms=args.min_cue_duration_ms,
+                        max_cps=args.max_cps, source_bytes=srt_bytes)
         subtitle_duration = Fraction(max(c["endMs"] for c in cues), 1000)
-        duration = audio_duration(audio_path) if audio_path else None
+        duration, audio_fingerprint = inspect_audio(audio_path) if audio_path else (None, None)
         if duration is not None:
             if subtitle_duration > duration:
                 warning(warnings, "subtitle_past_audio", f"Last subtitle exceeds audio by {float(subtitle_duration - duration):.3f} seconds; verify inputs")
@@ -175,12 +237,19 @@ def main():
         data = {
             "schemaVersion": 1,
             "sources": {"srt": str(srt_path), "audio": str(audio_path) if audio_path else None},
+            "sourceFingerprints": {
+                "srt": {"sha256": hashlib.sha256(srt_bytes).hexdigest()},
+                "audio": audio_fingerprint,
+            },
             "fps": str(fps), "fpsValue": float(fps),
             "frameRounding": "absolute timestamp, nearest frame, half up; endFrame exclusive; at least one frame per cue",
             "subtitleDurationSeconds": float(subtitle_duration),
             "audioDurationSeconds": float(duration) if duration is not None else None,
             "minimumDurationFrames": minimum,
             "longGapThresholdSeconds": LONG_GAP_MS / 1000,
+            "subtitleWarningThresholds": {
+                "minCueDurationMs": args.min_cue_duration_ms, "maxCps": args.max_cps,
+            },
             "cues": cues, "warnings": warnings,
         }
         write_json(data, output_path)
